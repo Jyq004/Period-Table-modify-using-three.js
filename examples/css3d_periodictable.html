@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>three.js css3d - periodic table</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<meta property="og:title" content="three.js css3d - periodic table">
+		<meta property="og:type" content="website">
+		<meta property="og:url" content="https://threejs.org/examples/css3d_periodictable.html">
+		<meta property="og:image" content="https://threejs.org/examples/screenshots/css3d_periodictable.jpg">
+		<link type="text/css" rel="stylesheet" href="main.css">
+		<style>
+			a {
+				color: #8ff;
+			}
+
+			#menu {
+				position: absolute;
+				bottom: 20px;
+				width: 100%;
+				text-align: center;
+				z-index: 2;
+			}
+
+			#net-worth-legend {
+				position: absolute;
+				right: 28px;
+				bottom: 24px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				color: #fff;
+				font: 12px/1 Helvetica, sans-serif;
+				z-index: 2;
+			}
+
+			#net-worth-legend .scale {
+				width: 120px;
+				height: 8px;
+				background: linear-gradient(90deg, #ef3022, #f28c28 28%, #f0ca35 52%, #9fcf3a 76%, #3a9f48);
+			}
+
+			.element {
+				width: 120px;
+				height: 160px;
+				box-sizing: border-box;
+				background: #101515;
+				border: 2px solid var(--worth-color, #3a9f48);
+				box-shadow: 0 0 10px color-mix(in srgb, var(--worth-color, #3a9f48) 35%, transparent);
+				font-family: Helvetica, sans-serif;
+				text-align: center;
+				line-height: normal;
+				cursor: default;
+			}
+
+			.element:hover {
+				box-shadow: 0 0 16px var(--worth-color, #3a9f48);
+			}
+
+				.element .meta {
+					position: absolute;
+					top: 7px;
+					left: 7px;
+					right: 7px;
+					display: flex;
+					justify-content: space-between;
+					gap: 4px;
+					font-size: 10px;
+					color: #f0f3f2;
+				}
+
+				.element .symbol {
+					position: absolute;
+					top: 48px;
+					left: 0px;
+					right: 0px;
+					font-size: 42px;
+					font-weight: bold;
+					color: #f0f3f2;
+				}
+
+				.element .photo {
+					position: absolute;
+					top: 25px;
+					left: 24px;
+					width: 68px;
+					height: 76px;
+					background: #222;
+					object-fit: cover;
+				}
+
+				.element .details {
+					position: absolute;
+					bottom: 7px;
+					left: 5px;
+					right: 5px;
+					color: #fff;
+				}
+
+				.element .name {
+					font-size: 10px;
+					font-weight: 600;
+					line-height: 1.2;
+					overflow-wrap: anywhere;
+				}
+
+				.element .interest {
+					margin-top: 3px;
+					font-size: 9px;
+					color: #d2d7d6;
+				}
+
+			button {
+				color: rgba(127,255,255,0.75);
+				background: transparent;
+				outline: 1px solid rgba(127,255,255,0.75);
+				border: 0px;
+				padding: 5px 10px;
+				cursor: pointer;
+			}
+
+			button:hover {
+				background-color: rgba(0,255,255,0.5);
+			}
+
+			button:active {
+				color: #000000;
+				background-color: rgba(0,255,255,0.75);
+			}
+
+			@media (max-width: 700px) {
+
+				#menu {
+					bottom: 14px;
+				}
+
+				#net-worth-legend {
+					bottom: 54px;
+					right: 50%;
+					transform: translateX(50%);
+				}
+
+			}
+
+		</style>
+	</head>
+	<body>
+
+		<div id="info"><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> css3d - periodic table.</div>
+		<div id="container"></div>
+		<div id="menu">
+			<button id="table">TABLE</button>
+			<button id="sphere">SPHERE</button>
+			<button id="helix">HELIX</button>
+			<button id="grid">GRID</button>
+		</div>
+		<div id="net-worth-legend" aria-label="Net worth from low to high">
+			<span>LOW</span>
+			<div class="scale"></div>
+			<span>HIGH</span>
+		</div>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "./jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+
+			import TWEEN from 'three/addons/libs/tween.module.js';
+			import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+			import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+
+			const SHEET_CSV_URL = new URLSearchParams( window.location.search ).get( 'sheet' ) || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQfWPvJ8Jm8vLRoHGIszOMLcNnG5hU9-Tst_Tq_2MRDYGYp8Vub45N-isGzN6X6QNDiuZu2sX-mrct_/pub?output=csv';
+
+			let camera, scene, renderer;
+			let controls;
+			const objects = [];
+			const targets = { table: [], sphere: [], helix: [], grid: [] };
+			const state = {
+				rows: []
+			};
+
+			init();
+			animate();
+
+			function init() {
+
+				camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 10000 );
+				camera.position.z = 3000;
+
+				scene = new THREE.Scene();
+
+				renderer = new CSS3DRenderer();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				document.getElementById( 'container' ).appendChild( renderer.domElement );
+
+				controls = new TrackballControls( camera, renderer.domElement );
+				controls.minDistance = 500;
+				controls.maxDistance = 6000;
+				controls.addEventListener( 'change', render );
+
+				const buttonTable = document.getElementById( 'table' );
+				buttonTable.addEventListener( 'click', function () {
+
+					transform( targets.table, 2000 );
+
+				} );
+
+				const buttonSphere = document.getElementById( 'sphere' );
+				buttonSphere.addEventListener( 'click', function () {
+
+					transform( targets.sphere, 2000 );
+
+				} );
+
+				const buttonHelix = document.getElementById( 'helix' );
+				buttonHelix.addEventListener( 'click', function () {
+
+					transform( targets.helix, 2000 );
+
+				} );
+
+				const buttonGrid = document.getElementById( 'grid' );
+				buttonGrid.addEventListener( 'click', function () {
+
+					transform( targets.grid, 2000 );
+
+				} );
+
+				window.addEventListener( 'resize', onWindowResize );
+				loadSheetData( SHEET_CSV_URL );
+
+			}
+
+			async function loadSheetData( url ) {
+
+				if ( ! url || url.includes( 'YOUR_SHEET_ID' ) ) {
+
+					buildRows( createFallbackData() );
+					return;
+
+				}
+
+				try {
+
+					const response = await fetch( url );
+					if ( ! response.ok ) {
+
+						throw new Error( 'Failed to load CSV: ' + response.status );
+
+					}
+
+					const csvText = await response.text();
+					const rows = csvToObjects( csvText );
+					if ( rows.length === 0 ) {
+
+						throw new Error( 'No rows were found in the sheet.' );
+
+					}
+
+					buildRows( rows );
+
+				} catch ( error ) {
+
+					console.error( error );
+					buildRows( createFallbackData() );
+
+				}
+
+			}
+
+			function buildRows( rawRows ) {
+
+				const normalized = rawRows.map( ( row, index ) => normalizeRow( row, index ) );
+				state.rows = normalized.filter( ( row ) => row.name || row.symbol );
+				const displayRows = state.rows.length > 0 ? state.rows : createFallbackData();
+				buildPeriodicTable( displayRows );
+
+			}
+
+			function normalizeRow( row, index ) {
+
+				const values = {};
+				Object.entries( row ).forEach( ( [ key, value ] ) => {
+
+					values[ key.replace( /[^a-zA-Z0-9]/g, '' ).toLowerCase() ] = value;
+
+				} );
+
+				const name = firstDefined( values, [ 'name', 'company', 'title', 'label', 'entity', 'element', 'fullName', 'companyname', 'companyName', 'personname', 'personName' ] ) || 'Record ' + ( index + 1 );
+				const symbol = firstDefined( values, [ 'symbol', 'shortcode', 'code', 'ticker', 'short', 'initials', 'abbreviation' ] ) || name.substring( 0, 3 ).toUpperCase();
+				const image = firstDefined( values, [ 'photo', 'image', 'photourl', 'imageurl', 'picture', 'avatar' ] );
+				const country = firstDefined( values, [ 'country', 'nation' ] ) || '';
+				const age = firstDefined( values, [ 'age' ] ) || '';
+				const detail = firstDefined( values, [ 'interest', 'details', 'industry', 'category', 'location', 'description', 'segment', 'business' ] ) || 'Data';
+				const netWorth = parseCurrency( firstDefined( values, [ 'networth', 'networthusd', 'networthinusd', 'worth', 'netwoth', 'net_worth', 'net worth', 'networthusdollars', 'networthinusd' ] ) );
+				const group = Number( firstDefined( values, [ 'group', 'groupnumber', 'col', 'column' ] ) ) || ( index % 20 ) + 1;
+				const period = Number( firstDefined( values, [ 'period', 'row', 'rownumber' ] ) ) || Math.floor( index / 20 ) + 1;
+				return {
+					id: index,
+					name,
+					symbol,
+					image,
+					country,
+					age,
+					detail,
+					netWorth,
+					group,
+					period,
+					color: getNetWorthColor( netWorth )
+				};
+
+			}
+
+			function buildPeriodicTable( rows ) {
+
+				clearScene();
+
+				const total = rows.length;
+				for ( let i = 0; i < total; i ++ ) {
+
+					const row = rows[ i ];
+					const element = document.createElement( 'div' );
+					element.className = 'element';
+					element.style.setProperty( '--worth-color', row.color );
+					element.title = formatCurrency( row.netWorth );
+
+					const meta = document.createElement( 'div' );
+					meta.className = 'meta';
+					const country = document.createElement( 'span' );
+					country.textContent = row.country;
+					const age = document.createElement( 'span' );
+					age.textContent = row.age;
+					meta.append( country, age );
+					element.appendChild( meta );
+
+					const symbol = document.createElement( 'div' );
+					symbol.className = 'symbol';
+					symbol.textContent = row.symbol || ( row.name || 'N' ).substring( 0, 3 ).toUpperCase();
+					if ( row.image ) {
+
+						symbol.style.display = 'none';
+						const photo = document.createElement( 'img' );
+						photo.className = 'photo';
+						photo.src = row.image;
+						photo.alt = row.name;
+						photo.loading = 'lazy';
+						photo.addEventListener( 'error', () => {
+
+							photo.remove();
+							symbol.style.display = '';
+
+						} );
+						element.appendChild( photo );
+
+					}
+
+					element.appendChild( symbol );
+
+					const details = document.createElement( 'div' );
+					details.className = 'details';
+					const name = document.createElement( 'div' );
+					name.className = 'name';
+					name.textContent = row.name;
+					const interest = document.createElement( 'div' );
+					interest.className = 'interest';
+					interest.textContent = row.detail;
+					details.append( name, interest );
+					element.appendChild( details );
+
+					const objectCSS = new CSS3DObject( element );
+					objectCSS.position.x = 0;
+					objectCSS.position.y = 0;
+					objectCSS.position.z = 0;
+					scene.add( objectCSS );
+					objects.push( objectCSS );
+
+					const object = new THREE.Object3D();
+					object.position.x = ( ( i % 20 ) * 140 ) - 1330;
+					object.position.y = - ( Math.floor( i / 20 ) * 180 ) + ( ( Math.ceil( total / 20 ) - 1 ) * 90 );
+					targets.table.push( object );
+
+				}
+
+				buildSphereTargets();
+				buildHelixTargets();
+				buildGridTargets( total );
+				transform( targets.table, 2000 );
+
+			}
+
+			function clearScene() {
+
+				for ( let i = scene.children.length - 1; i >= 0; i -- ) {
+
+					scene.remove( scene.children[ i ] );
+
+				}
+
+				objects.length = 0;
+				Object.keys( targets ).forEach( ( key ) => {
+
+					targets[ key ].length = 0;
+
+				} );
+
+			}
+
+			function buildSphereTargets() {
+
+				const vector = new THREE.Vector3();
+				for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+					const phi = Math.acos( - 1 + ( 2 * i ) / l );
+					const theta = Math.sqrt( l * Math.PI ) * phi;
+
+					const object = new THREE.Object3D();
+					object.position.setFromSphericalCoords( 800, phi, theta );
+					vector.copy( object.position ).multiplyScalar( 2 );
+					object.lookAt( vector );
+					targets.sphere.push( object );
+
+				}
+
+			}
+
+			function buildHelixTargets() {
+
+				const verticalStep = 8;
+				const centerY = ( ( objects.length - 1 ) * verticalStep ) / 2;
+				const radius = 850;
+				for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+					const theta = i * 0.175 + Math.PI;
+					const y = centerY - i * verticalStep;
+
+					const object = new THREE.Object3D();
+					object.position.setFromCylindricalCoords( radius, theta, y );
+					object.lookAt( 0, object.position.y, 3000 );
+					targets.helix.push( object );
+
+				}
+
+			}
+
+			function buildGridTargets( total ) {
+
+				for ( let i = 0; i < total; i ++ ) {
+
+					const object = new THREE.Object3D();
+					const layer = Math.floor( i / 20 );
+					const cell = i % 20;
+					object.position.x = ( cell % 5 ) * 400 - 800;
+					object.position.y = ( - Math.floor( cell / 5 ) % 4 ) * 400 + 800;
+					object.position.z = layer * 1000 - 4500;
+					targets.grid.push( object );
+
+				}
+
+			}
+
+			function createFallbackData() {
+
+				return [
+					{ name: 'Alpha', symbol: 'A', netWorth: 450000, detail: 'Finance' },
+					{ name: 'Bravo', symbol: 'B', netWorth: 150000, detail: 'Energy' },
+					{ name: 'Charlie', symbol: 'C', netWorth: 90000, detail: 'Technology' },
+					{ name: 'Delta', symbol: 'D', netWorth: 260000, detail: 'Healthcare' },
+					{ name: 'Echo', symbol: 'E', netWorth: 300000, detail: 'Logistics' },
+					{ name: 'Foxtrot', symbol: 'F', netWorth: 200000, detail: 'Retail' },
+					{ name: 'Golf', symbol: 'G', netWorth: 125000, detail: 'Real Estate' },
+					{ name: 'Hotel', symbol: 'H', netWorth: 70000, detail: 'Media' },
+					{ name: 'India', symbol: 'I', netWorth: 210000, detail: 'Agriculture' },
+					{ name: 'Juliet', symbol: 'J', netWorth: 95000, detail: 'Transport' },
+					{ name: 'Kilo', symbol: 'K', netWorth: 320000, detail: 'Biotech' },
+					{ name: 'Lima', symbol: 'L', netWorth: 145000, detail: 'Construction' },
+					{ name: 'Mike', symbol: 'M', netWorth: 80000, detail: 'Mining' },
+					{ name: 'November', symbol: 'N', netWorth: 280000, detail: 'Telecom' },
+					{ name: 'Oscar', symbol: 'O', netWorth: 170000, detail: 'Defense' },
+					{ name: 'Papa', symbol: 'P', netWorth: 60000, detail: 'Education' }
+				];
+
+			}
+
+			function csvToObjects( csvText ) {
+
+				const rows = parseCsv( csvText );
+				if ( rows.length < 2 ) {
+
+					return [];
+			
+	}
+
+				const headers = rows[ 0 ].map( ( value ) => value.trim() );
+				return rows.slice( 1 ).filter( ( row ) => row.some( ( value ) => value.trim() !== '' ) ).map( ( row ) => {
+
+					const record = {};
+					headers.forEach( ( header, index ) => {
+
+						record[ header ] = row[ index ] || '';
+
+					} );
+					return record;
+
+				} );
+
+			}
+
+			function parseCsv( text ) {
+
+				const rows = [];
+				let row = [];
+				let value = '';
+				let inQuotes = false;
+
+				for ( let i = 0; i < text.length; i ++ ) {
+
+					const character = text[ i ];
+
+					if ( character === '"' ) {
+
+						if ( inQuotes && text[ i + 1 ] === '"' ) {
+
+							value += '"';
+							i ++;
+
+						} else {
+
+							inQuotes = ! inQuotes;
+
+						}
+
+					} else if ( character === ',' && ! inQuotes ) {
+
+						row.push( value );
+						value = '';
+
+					} else if ( ( character === '\n' || character === '\r' ) && ! inQuotes ) {
+
+						if ( character === '\r' && text[ i + 1 ] === '\n' ) {
+
+							i ++;
+
+						}
+
+						row.push( value );
+						if ( row.some( ( cell ) => cell.trim() !== '' ) ) {
+
+							rows.push( row );
+
+						}
+
+						row = [];
+						value = '';
+
+					} else {
+
+						value += character;
+
+					}
+
+				}
+
+				if ( value.length > 0 || row.length > 0 ) {
+
+					row.push( value );
+					rows.push( row );
+
+				}
+
+				return rows;
+
+			}
+
+			function firstDefined( source, keys ) {
+
+				for ( const key of keys ) {
+
+					const value = source[ key ] ?? source[ key.toLowerCase() ] ?? source[ key.replace( /\s+/g, '' ) ] ?? source[ key.replace( /\s+/g, '' ).toLowerCase() ];
+					if ( value !== undefined && value !== null && String( value ).trim() !== '' ) {
+
+						return value;
+			
+		}
+			
+	}
+
+				return undefined;
+
+			}
+
+			function parseCurrency( value ) {
+
+				if ( value === undefined || value === null || value === '' ) {
+
+					return 0;
+			
+	}
+
+				const normalized = String( value )
+					.replace( /[$,\s]/g, '' )
+					.replace( /%/g, '' )
+					.replace( /K/gi, '000' )
+					.replace( /M/gi, '000000' )
+					.replace( /B/gi, '000000000' );
+				const numeric = Number( normalized );
+				return Number.isFinite( numeric ) ? numeric : 0;
+
+			}
+
+			function formatCurrency( value ) {
+
+				const numeric = Number( value ) || 0;
+				return '$' + numeric.toLocaleString( 'en-US', {
+					maximumFractionDigits: 0
+				} );
+
+			}
+
+			function getNetWorthColor( value ) {
+
+				if ( value < 100000 ) {
+
+					return '#ef3022';
+			
+	}
+
+				if ( value < 200000 ) {
+
+					return '#f28c28';
+			
+	}
+
+				return '#3a9f48';
+
+			}
+
+			function transform( targetsList, duration ) {
+
+				TWEEN.removeAll();
+
+				for ( let i = 0; i < objects.length; i ++ ) {
+
+					const object = objects[ i ];
+					const target = targetsList[ i ];
+					if ( ! target ) {
+
+						continue;
+			
+		}
+
+					new TWEEN.Tween( object.position )
+						.to( { x: target.position.x, y: target.position.y, z: target.position.z }, Math.random() * duration + duration )
+						.easing( TWEEN.Easing.Exponential.InOut )
+						.start();
+
+					new TWEEN.Tween( object.rotation )
+						.to( { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z }, Math.random() * duration + duration )
+						.easing( TWEEN.Easing.Exponential.InOut )
+						.start();
+
+				}
+
+				new TWEEN.Tween( this )
+					.to( {}, duration * 2 )
+					.onUpdate( render )
+					.start();
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				render();
+
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+				TWEEN.update();
+				if ( controls ) {
+
+					controls.update();
+
+				}
+
+			}
+
+			function render() {
+
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+	</body>
+</html>
